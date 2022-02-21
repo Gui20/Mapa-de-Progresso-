@@ -209,28 +209,31 @@ mapa_progresso_rede_df.to_excel(writer, 'Mapa de Progresso Rede', startrow=7, st
  Concatenando as colunas a partir da tabela RAMAL, INSTALAÇÃO, VISTORIA E LIGAÇÃO
 '''
 
+# Renomeia a coluna n_nota pra conseguir aplicar o merge
 vistoria_df_novo = vistoria_df.rename(columns={'NNota': 'n_nota'})
 
+# Aplicando um sufixo em todos os dataframes para fácil identificação
 dfs = {0: ramal_df, 1: ligacao_df, 2: instalacao_df, 3: vistoria_df_novo}
-
 suffix = ('_ramal', '_ligacao', '_instalacao', '_vistoria')
-
 for i in dfs:
     dfs[i] = dfs[i].add_suffix(suffix[i])
 
+# renomeando as colunas n_nota antes de aplicar o merge
 dfs[3] = dfs[3].rename(columns={'n_nota_vistoria': 'n_nota'})
 dfs[0] = dfs[0].rename(columns={'n_nota_ramal': 'n_nota'})
 dfs[1] = dfs[1].rename(columns={'n_nota_ligacao': 'n_nota'})
 dfs[2] = dfs[2].rename(columns={'n_nota_instalacao': 'n_nota'})
 
 
+# mesclando os 4 dataframes
 def agg_df(dflist):
     temp = reduce(lambda left, right: pd.merge(left, right, on='n_nota'), dflist)
-
     return temp
 
 
 df_final = agg_df(dfs.values())
+
+# Removendo as linhas duplicadas
 df_final = df_final.drop_duplicates(subset=['n_nota']).reset_index(drop=True)
 
 # Nota
@@ -299,8 +302,8 @@ for v in df_final['data_info_gerais_ramal']:
         furo_r_aux.append(datetime.strptime(v, '%d/%m/%Y').strftime('%d/%b/%Y'))
     except:
         furo_r_aux.append(v)
-        print(
-            "Os valores não estão sendo salvos na base de dados com um padrão! Coluna O - Furo 80% - Mapa de Progresso Ramal + Ligação")
+        print("Os valores não estão sendo salvos na base de dados com um padrão! "
+              "Coluna O - Furo 80% - Mapa de Progresso Ramal + Ligação")
 furo_r_df = pd.Series(furo_r_aux)
 
 # mês
@@ -345,8 +348,8 @@ for v in df_final['Data_vistoria']:
             vist_data_aux.append(datetime.strptime(v, '%d/%m/%Y').strftime('%d/%b/%Y'))
         except:
             vist_data_aux.append(v)
-            print(
-                "Os valores não estão sendo salvos na base de dados com um padrão! Coluna W - Vistoria (15%)- Mapa de Progresso Ramal + Ligação")
+            print("Os valores não estão sendo salvos na base de dados com um padrão! "
+                  "Coluna W - Vistoria (15%)- Mapa de Progresso Ramal + Ligação")
 vist_data_df = pd.Series(vist_data_aux)
 
 # Interna Data
@@ -360,8 +363,8 @@ for v in df_final['data_info_gerais_instalacao']:
             int_data_aux.append(datetime.strptime(v, '%d/%m/%Y').strftime('%d/%b/%Y'))
         except:
             int_data_aux.append(v)
-            print(
-                "Os valores não estão sendo salvos na base de dados com um padrão! Coluna X - Interna (45%) - Mapa de Progresso Ramal + Ligação")
+            print("Os valores não estão sendo salvos na base de dados com um padrão! "
+                  "Coluna X - Interna (45%) - Mapa de Progresso Ramal + Ligação")
 int_data_df = pd.Series(int_data_aux)
 
 # Ligação Data
@@ -375,8 +378,8 @@ for v in df_final['data_info_gerais_ligacao']:
             lig_data_aux.append(datetime.strptime(v, '%d/%m/%Y').strftime('%d/%b/%Y'))
         except:
             lig_data_aux.append(v)
-            print(
-                "Os valores não estão sendo salvos na base de dados com um padrão! Coluna Y - Ligação (20%) - Mapa de Progresso Ramal + Ligação")
+            print("Os valores não estão sendo salvos na base de dados com um padrão! "
+                  "Coluna Y - Ligação (20%) - Mapa de Progresso Ramal + Ligação")
 lig_data_df = pd.Series(lig_data_aux)
 
 # Mês ligação
@@ -459,4 +462,4 @@ writer.save()
 
 fim = time.time()
 
-print("O tempo de execução é: {} ms ".format(fim-inicio))
+print("O tempo de execução é: {} s ".format(fim - inicio))
