@@ -3,9 +3,13 @@ from openpyxl import load_workbook
 import sqlalchemy
 from datetime import datetime
 import locale
+from functools import reduce
+import time
 
+inicio = time.time()
 
 locale.setlocale(locale.LC_ALL, 'pt_pt.UTF-8')
+
 
 def conect_sql_server():
     engine = sqlalchemy.create_engine(
@@ -39,7 +43,7 @@ finally:
 book = load_workbook(r'C:\Users\gcoel\PycharmProjects\AcessandoSQL\Mapa de Progresso - Modelo - Oficial.xlsx')
 
 # Selecionando local e arquivo a ser criado com o formato do book
-writer = pd.ExcelWriter(r'C:\Users\gcoel\Documents\Mapa de Progresso brabo\Mapa de Progresso - Oficial.xlsx',
+writer = pd.ExcelWriter(r'C:\Users\gcoel\Documents\Mapa de Progresso brabo\Mapa de Progresso - Oficial - MERGE.xlsx',
                         engine='openpyxl')
 writer.book = book
 writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
@@ -47,7 +51,7 @@ writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
 '''
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- Mapa de Progresso Rede -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
  Concatenando as colunas a partir da tabela FURODIRECIONAL 
- 
+
  '''
 
 # Fase
@@ -139,7 +143,8 @@ for v in furodirecional_df['Data']:
         furo_aux.append(datetime.strptime(v, '%d/%m/%Y').strftime('%d/%b/%Y'))
     except:
         furo_aux.append(v)
-        print("Os valores não estão sendo salvos na base de dados com um padrão! -> Coluna U - Furo 80% - Mapa de Progresso Rede")
+        print(
+            "Os valores não estão sendo salvos na base de dados com um padrão! -> Coluna U - Furo 80% - Mapa de Progresso Rede")
 furo_df = pd.Series(furo_aux)
 
 # Mês
@@ -179,7 +184,7 @@ for v in furodirecional_df['IdentificacaoFormulario']:
         split1 = ' + '.join(string_alt.split('à')[0].split('+'))
         split2 = ' + '.join(string_alt.split('à')[1].split('+'))
         end = ' à '.join([split1, split2])
-        final = start + ' '+end
+        final = start + ' ' + end
         iden_furo_aux.append(final)
     except:
         iden_furo_aux.append(v)
@@ -204,19 +209,39 @@ mapa_progresso_rede_df.to_excel(writer, 'Mapa de Progresso Rede', startrow=7, st
  Concatenando as colunas a partir da tabela RAMAL, INSTALAÇÃO, VISTORIA E LIGAÇÃO
 '''
 
-ligacao_df = pd.merge(ligacao_df, ramal_df[['n_nota']], on=["n_nota"], how="inner")
-instalacao_df = pd.merge(instalacao_df, ramal_df[['n_nota']], on=["n_nota"], how="inner")
-# vistoria_df = pd.merge(vistoria_df, ramal_df[['n_nota']], on=["NNota"], how="inner")
+vistoria_df_novo = vistoria_df.rename(columns={'NNota': 'n_nota'})
+
+dfs = {0: ramal_df, 1: ligacao_df, 2: instalacao_df, 3: vistoria_df_novo}
+
+suffix = ('_ramal', '_ligacao', '_instalacao', '_vistoria')
+
+for i in dfs:
+    dfs[i] = dfs[i].add_suffix(suffix[i])
+
+dfs[3] = dfs[3].rename(columns={'n_nota_vistoria': 'n_nota'})
+dfs[0] = dfs[0].rename(columns={'n_nota_ramal': 'n_nota'})
+dfs[1] = dfs[1].rename(columns={'n_nota_ligacao': 'n_nota'})
+dfs[2] = dfs[2].rename(columns={'n_nota_instalacao': 'n_nota'})
+
+
+def agg_df(dflist):
+    temp = reduce(lambda left, right: pd.merge(left, right, on='n_nota'), dflist)
+
+    return temp
+
+
+df_final = agg_df(dfs.values())
+df_final = df_final.drop_duplicates(subset=['n_nota']).reset_index(drop=True)
 
 # Nota
-nota_df = pd.to_numeric(ramal_df['n_nota'])
+nota_df = pd.to_numeric(df_final['n_nota'])
 
 # Número
-num_df = pd.to_numeric(ramal_df['numero_endereco'])
+num_df = pd.to_numeric(df_final['numero_endereco_ramal'])
 
 # RIC / LL4
 ric_aux = []
-for v in ramal_df['local_atividade']:
+for v in df_final['local_atividade_ramal']:
     if "RIC" in v:
         v = "RIC"
         ric_aux.append(v)
@@ -232,7 +257,7 @@ ric_df = pd.Series(ric_aux)
 # Condomínio / Fase
 fase_aux = []
 cond_aux = []
-for v in ramal_df['local_atividade']:
+for v in df_final['local_atividade_ramal']:
     x = v.upper()
     if "RIC" in x:
         fase_aux.append(x[:8])
@@ -249,14 +274,14 @@ cond_df = pd.Series(cond_aux)
 
 # Método
 tat_aux = []
-for i in ramal_df['n_relatorio'].index:
+for i in df_final['n_relatorio_ramal'].index:
     tat_aux.append('Tatuzinho')
 
 tat_df = pd.Series(tat_aux)
 
 # Material
 mat_aux = []
-for v in ramal_df['rede_distribuicao_material']:
+for v in df_final['rede_distribuicao_material_ramal']:
     if "PE" in v:
         x = "Tubo PE"
         mat_aux.append(x)
@@ -269,17 +294,18 @@ mat_df = pd.Series(mat_aux)
 # Furo 80%
 furo_r_aux = []
 
-for v in ramal_df['data_info_gerais']:
+for v in df_final['data_info_gerais_ramal']:
     try:
         furo_r_aux.append(datetime.strptime(v, '%d/%m/%Y').strftime('%d/%b/%Y'))
     except:
         furo_r_aux.append(v)
-        print("Os valores não estão sendo salvos na base de dados com um padrão! Coluna O - Furo 80% - Mapa de Progresso Ramal + Ligação")
+        print(
+            "Os valores não estão sendo salvos na base de dados com um padrão! Coluna O - Furo 80% - Mapa de Progresso Ramal + Ligação")
 furo_r_df = pd.Series(furo_r_aux)
 
 # mês
 s = []
-for v in ramal_df['data_info_gerais']:
+for v in df_final['data_info_gerais_ramal']:
     s.append(int(v[3:5] + v[6:]))
 s_df = pd.Series(s)
 
@@ -288,7 +314,7 @@ d_ramal_aux = []
 # Data inicial
 d1_ramal = datetime.strptime('28/08/2020', '%d/%m/%Y')
 
-for data_ramal in ramal_df['data_info_gerais']:
+for data_ramal in df_final['data_info_gerais_ramal']:
     # Data final
     d2_ramal = datetime.strptime(data_ramal, '%d/%m/%Y')
     diff = abs((d2_ramal - d1_ramal).days)
@@ -298,7 +324,7 @@ semana_ramal_df = pd.Series(d_ramal_aux)
 
 # Quantidade Ligação (un)
 qtd_ligacao_aux = []
-for v in ligacao_df['data_info_gerais']:
+for v in df_final['data_info_gerais_ligacao']:
     if v == "":
         v = 0
         qtd_ligacao_aux.append(int(v))
@@ -311,7 +337,7 @@ qtd_r_df = pd.Series(qtd_ligacao_aux)
 # Vistoria Data
 vist_data_aux = []
 
-for v in vistoria_df['Data']:
+for v in df_final['Data_vistoria']:
     if v == "":
         vist_data_aux.append(v)
     else:
@@ -319,13 +345,14 @@ for v in vistoria_df['Data']:
             vist_data_aux.append(datetime.strptime(v, '%d/%m/%Y').strftime('%d/%b/%Y'))
         except:
             vist_data_aux.append(v)
-            print("Os valores não estão sendo salvos na base de dados com um padrão! Coluna W - Vistoria (15%)- Mapa de Progresso Ramal + Ligação")
+            print(
+                "Os valores não estão sendo salvos na base de dados com um padrão! Coluna W - Vistoria (15%)- Mapa de Progresso Ramal + Ligação")
 vist_data_df = pd.Series(vist_data_aux)
 
 # Interna Data
 int_data_aux = []
 
-for v in instalacao_df['data_info_gerais']:
+for v in df_final['data_info_gerais_instalacao']:
     if v == "":
         int_data_aux.append(v)
     else:
@@ -333,13 +360,14 @@ for v in instalacao_df['data_info_gerais']:
             int_data_aux.append(datetime.strptime(v, '%d/%m/%Y').strftime('%d/%b/%Y'))
         except:
             int_data_aux.append(v)
-            print("Os valores não estão sendo salvos na base de dados com um padrão! Coluna X - Interna (45%) - Mapa de Progresso Ramal + Ligação")
+            print(
+                "Os valores não estão sendo salvos na base de dados com um padrão! Coluna X - Interna (45%) - Mapa de Progresso Ramal + Ligação")
 int_data_df = pd.Series(int_data_aux)
 
 # Ligação Data
 lig_data_aux = []
 
-for v in ligacao_df['data_info_gerais']:
+for v in df_final['data_info_gerais_ligacao']:
     if v == "":
         lig_data_aux.append(v)
     else:
@@ -347,12 +375,13 @@ for v in ligacao_df['data_info_gerais']:
             lig_data_aux.append(datetime.strptime(v, '%d/%m/%Y').strftime('%d/%b/%Y'))
         except:
             lig_data_aux.append(v)
-            print("Os valores não estão sendo salvos na base de dados com um padrão! Coluna Y - Ligação (20%) - Mapa de Progresso Ramal + Ligação")
+            print(
+                "Os valores não estão sendo salvos na base de dados com um padrão! Coluna Y - Ligação (20%) - Mapa de Progresso Ramal + Ligação")
 lig_data_df = pd.Series(lig_data_aux)
 
 # Mês ligação
 s_lig_aux = []
-for v in ligacao_df['data_info_gerais']:
+for v in df_final['data_info_gerais_ligacao']:
     if v == '':
         s_lig_aux.append(v)
     else:
@@ -364,7 +393,7 @@ d_lig_aux = []
 # Data inicial
 d1_lig = datetime.strptime('28/08/2020', '%d/%m/%Y')
 
-for data_lig in ligacao_df['data_info_gerais']:
+for data_lig in df_final['data_info_gerais_ligacao']:
     if data_lig == "":
         d_lig_aux.append("")
     else:
@@ -377,7 +406,7 @@ semana_lig_df = pd.Series(d_lig_aux)
 
 # Vistoria
 vist_aux = []
-for value in vistoria_df['Data']:
+for value in df_final['Data_vistoria']:
     if value == "":
         vist_aux.append("")
     else:
@@ -386,7 +415,7 @@ vist_df = pd.Series(vist_aux)
 
 # Interna
 inter_aux = []
-for value in instalacao_df['data_info_gerais']:
+for value in df_final['data_info_gerais_instalacao']:
     if value == "":
         inter_aux.append("")
     else:
@@ -395,7 +424,7 @@ inter_df = pd.Series(inter_aux)
 
 # Ramal
 r_aux = []
-for value in ramal_df['data_info_gerais']:
+for value in df_final['data_info_gerais_ramal']:
     if value == "":
         r_aux.append("")
     else:
@@ -404,7 +433,7 @@ r_df = pd.Series(r_aux)
 
 # Ligação
 lig_aux = []
-for value in ligacao_df['data_info_gerais']:
+for value in df_final['data_info_gerais_ligacao']:
     if value == "":
         lig_aux.append("")
     else:
@@ -412,10 +441,10 @@ for value in ligacao_df['data_info_gerais']:
 lig_df = pd.Series(lig_aux)
 
 # Criação de lista com todos os dataframes a serem concatenados para Mapa de Ramal e Ligação
-dataframes_2 = [nota_df, ramal_df['endereco_cliente'], num_df, ramal_df['cidade'], cond_df, ric_df,
-                ramal_df['tipo_ramal'], fase_df, instalacao_df['tipo_pacote_venda'], tat_df, mat_df, vazio_df,
-                ramal_df['n_relatorio'], ramal_df['servicos_qtd'], furo_r_df,
-                furo_r_df, vazio_df, s_df, semana_ramal_df, vazio_df, ligacao_df['n_relatorio'],
+dataframes_2 = [nota_df, df_final['endereco_cliente_ramal'], num_df, df_final['cidade_ramal'], cond_df, ric_df,
+                df_final['tipo_ramal_ramal'], fase_df, df_final['tipo_pacote_venda_ligacao'], tat_df, mat_df, vazio_df,
+                df_final['n_relatorio_ramal'], df_final['servicos_qtd_ramal'], furo_r_df,
+                furo_r_df, vazio_df, s_df, semana_ramal_df, vazio_df, df_final['n_relatorio_ligacao'],
                 qtd_r_df, vist_data_df, int_data_df, lig_data_df,
                 vazio_df, s_lig_df, semana_lig_df, vazio_df, vist_df, inter_df, r_df, lig_df]
 
@@ -427,3 +456,7 @@ mapa_progresso_ramal_ligacao_df.to_excel(writer, 'Mapa de Progresso Ramal+Ligaç
                                          header=False, index=False)
 
 writer.save()
+
+fim = time.time()
+
+print("O tempo de execução é: {} ms ".format(fim-inicio))
